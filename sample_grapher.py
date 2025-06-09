@@ -6,8 +6,10 @@ import os
 
 import matplotlib.pyplot as plt
 
-from mrc_parser import MRC_Parser, BoxnetTF
+from mrc_parser import MRC_Parser, BoxnetPT, BoxnetTF
 from mrc_parser.util import mrc_to_numpy
+
+from tqdm import tqdm
 
 # Config
 MRC_DIR = "new-data" # Provide a path to a directory containing .mrc files (and potentially other files)
@@ -19,26 +21,43 @@ if not os.path.exists(RESULTS_DIR):
 # Find file paths
 mrc_files = [x for x in os.listdir(MRC_DIR) if x[-4:] == ".mrc"]
 
-# Load model (provides the option for loading torch port or other models)
-model = BoxnetTF("boxnet.tflite")
+# Load model (uncomment model of preference)
+model = BoxnetPT("boxnet.pt")
+# model = BoxnetTF("boxnet.tflite")
+
+# Move model to device (available for torch only)
+if type(model) == BoxnetPT:
+    device = "mps" # or "cuda" or "cpu", depending on availability
+    model = model.to(device) # Optional
 
 # Init parser
 parser = MRC_Parser(model)
+results = []
 
-for mrc_file in mrc_files:
+print("Processing files...")
+
+for mrc_file in tqdm(mrc_files):
     mrc_path = os.path.join(MRC_DIR, mrc_file)
 
     # Boxnet in 1 line
-    results = parser(mrc_path)
+    result = parser(mrc_path)
 
     # Extract image and masks
     img = mrc_to_numpy(mrc_path)
-    particle_mask = results[:, :, 1] # Take channel 1 of all pixels
-    bad_mask = results[:, :, 2] # Take channel 2 of all pixels
+    particle_mask = result[:, :, 1] # Take channel 1 of all pixels
+    bad_mask = result[:, :, 2] # Take channel 2 of all pixels
 
-    # ================================================================================
-    # Below is all plotting and doesn't show any special uses of the mrc_parser module
-    # ================================================================================
+    results.append((mrc_file, img, particle_mask, bad_mask))
+
+# ================================================================================
+# Below is all plotting and doesn't show any special uses of the mrc_parser module
+# ================================================================================
+
+print("\nPlotting and saving mask images...")
+
+for result in tqdm(results):
+    # Unpack result
+    mrc_file, img, particle_mask, bad_mask = result
 
     # Set up 3 side-by-side plots
     fig, axes = plt.subplots(1, 3, figsize=(15, 5), constrained_layout=True)
